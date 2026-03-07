@@ -10,19 +10,20 @@ function Logo({ theme = "dark" }) {
   const metaClass = theme === "light" ? "text-slate-500" : "text-slate-400";
 
   return (
-    <div className="flex items-center gap-3">
-      <div className={`relative h-9 w-9 rounded-xl border ${markClass}`}>
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div className={`relative h-8 w-8 rounded-xl border sm:h-9 sm:w-9 ${markClass}`}>
         <div className={`absolute inset-2 rounded-full border ${ringClass}`} />
         <div className={`absolute inset-[14px] rounded-full ${dotClass}`} />
       </div>
-      <div>
-        <p className={`bg-clip-text text-lg font-extrabold tracking-tight text-transparent ${wordmarkClass}`}>
+      <div className="min-w-0">
+        <p className={`bg-clip-text text-base font-extrabold sm:text-lg tracking-tight text-transparent ${wordmarkClass}`}>
           LogicLens
         </p>
-        <p className={`text-[10px] uppercase tracking-[0.2em] ${metaClass}`}>Code Intelligence</p>
+        <p className={`text-[9px] uppercase tracking-[0.16em] sm:text-[10px] sm:tracking-[0.2em] ${metaClass}`}>Code Intelligence</p>
       </div>
     </div>
   );
 }
 
 export default Logo;
+

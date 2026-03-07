@@ -122,6 +122,7 @@ function Dashboard() {
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => Number(localStorage.getItem("logiclens:left-panel-width") || 55));
   const [isResizingPanels, setIsResizingPanels] = useState(false);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(() => (typeof window !== "undefined" ? window.innerWidth >= 1024 : true));
 
   const gateTimerRef = useRef(null);
   const workspaceRef = useRef(null);
@@ -162,7 +163,15 @@ function Dashboard() {
   }, [leftPanelWidth]);
 
   useEffect(() => {
-    if (!isResizingPanels) return;
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const syncLayout = (event) => setIsDesktopLayout(event.matches);
+    setIsDesktopLayout(mediaQuery.matches);
+    mediaQuery.addEventListener("change", syncLayout);
+    return () => mediaQuery.removeEventListener("change", syncLayout);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizingPanels || !isDesktopLayout) return;
 
     const handleMouseMove = (event) => {
       if (!workspaceRef.current) return;
@@ -185,7 +194,7 @@ function Dashboard() {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizingPanels]);
+  }, [isDesktopLayout, isResizingPanels]);
 
   useEffect(() => {
     setProfileName(user?.name || "");
@@ -429,10 +438,10 @@ function Dashboard() {
       <div className={`pointer-events-none fixed inset-0 ${theme === "light" ? "bg-[radial-gradient(circle_at_12%_14%,rgba(56,189,248,0.18),transparent_36%),radial-gradient(circle_at_82%_10%,rgba(16,185,129,0.12),transparent_38%),linear-gradient(180deg,rgba(248,251,255,0.92),rgba(237,244,251,0.72))]" : "bg-[radial-gradient(circle_at_12%_16%,rgba(34,211,238,0.16),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(59,130,246,0.14),transparent_42%)]"}`} />
 
       <header className={`fixed inset-x-0 top-0 z-30 border-b backdrop-blur ${shellClass}`}>
-        <div className="mx-auto flex max-w-7xl items-center justify-between p-4 md:px-6">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 p-3 sm:p-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
           <Logo theme={theme} />
 
-          <div className="flex items-center gap-3">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:gap-3 lg:w-auto lg:flex-nowrap lg:justify-end">
             <button
               onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
               className={`rounded-lg border px-3 py-2 text-sm ${theme === "light" ? "border-slate-300 bg-white text-slate-700" : "border-slate-700 bg-slate-800 text-slate-200"}`}
@@ -440,12 +449,12 @@ function Dashboard() {
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
 
-            <div className={`rounded-lg border px-3 py-2 text-xs ${theme === "light" ? "border-slate-300 bg-white text-slate-600" : "border-slate-800 bg-slate-900 text-slate-300"}`}>
+            <div className={`order-3 w-full rounded-lg border px-3 py-2 text-center text-xs sm:order-none sm:w-auto ${theme === "light" ? "border-slate-300 bg-white text-slate-600" : "border-slate-800 bg-slate-900 text-slate-300"}`}>
               {authLoading || sessionLoading ? "Loading session..." : statusText}
             </div>
 
             {!isLoggedIn ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 sm:ml-auto">
                 <button
                   onClick={() => { setAuthMode("login"); setShowAuth(true); }}
                   className={`rounded-lg border px-4 py-2 text-sm font-medium ${theme === "light" ? "border-sky-300 bg-white text-sky-900 hover:bg-sky-50" : "border-slate-700 bg-slate-800 text-slate-100"}`}
@@ -501,7 +510,7 @@ function Dashboard() {
       {sessionLoading && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-[2px]">
           <div className={`rounded-2xl border px-5 py-4 shadow-2xl ${theme === "light" ? "border-stone-300 bg-white text-slate-800" : "border-slate-700 bg-slate-900 text-slate-100"}`}>
-            <div className="flex items-center gap-3">
+            <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:gap-3 lg:w-auto lg:flex-nowrap lg:justify-end">
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-400 border-t-cyan-400" />
               <div>
                 <p className="text-sm font-semibold">Signing you in</p>
@@ -512,7 +521,7 @@ function Dashboard() {
         </div>
       )}
 
-      <div className="relative mx-auto max-w-[1380px] px-4 pb-0 pt-24 md:px-6 md:pt-24 lg:pr-10 xl:pr-14">
+      <div className="relative mx-auto max-w-[1380px] px-3 pb-0 pt-36 sm:px-4 sm:pt-32 md:px-6 md:pt-28 lg:pr-10 xl:pr-14">
         <div className={`mb-4 rounded-2xl border px-4 py-3 text-sm shadow-[0_0_30px_rgba(34,211,238,0.08)] ${theme === "light" ? "border-slate-400 bg-gradient-to-r from-slate-100 via-white to-blue-50 text-slate-800" : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100"}`}>
           {isLoggedIn ? (
             <span>Welcome back, <span className="font-semibold">{user.name}</span>. Review focused on core DSA correctness and algorithm quality.</span>
@@ -522,8 +531,8 @@ function Dashboard() {
         </div>
 
         <main ref={workspaceRef} className="flex flex-col gap-4 lg:flex-row">
-          <section style={{ flexBasis: `${leftPanelWidth}%` }} className={`rounded-2xl border p-4 backdrop-blur ${panelClass} h-[760px] min-w-0 flex flex-col lg:flex-none`}>
-            <div className="mb-3 flex items-center justify-between">
+          <section style={isDesktopLayout ? { flexBasis: `${leftPanelWidth}%` } : undefined} className={`rounded-2xl border p-3 sm:p-4 backdrop-blur ${panelClass} min-h-[640px] lg:h-[760px] min-w-0 flex flex-col lg:flex-none`}>
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="font-medium">Editor</h2>
               <div className="flex items-center gap-3 text-xs opacity-80">
                 <select value={language} onChange={(e) => setLanguage(e.target.value)} className={`rounded border px-2 py-1 text-xs ${theme === "light" ? "border-slate-500 bg-white text-slate-800" : "border-slate-700 bg-slate-900 text-slate-200"}`}>
@@ -541,7 +550,7 @@ function Dashboard() {
               </div>
             </div>
 
-            <div className={`flex-1 overflow-hidden rounded-xl border ${theme === "light" ? "border-2 border-slate-500" : "border-slate-800"}`}>
+            <div className={`min-h-[320px] flex-1 overflow-hidden rounded-xl border ${theme === "light" ? "border-2 border-slate-500" : "border-slate-800"}`}>
               <Editor
                 height="100%"
                 theme={theme === "light" ? "vs" : "vs-dark"}
@@ -559,7 +568,7 @@ function Dashboard() {
               onChange={(e) => setQuestion(e.target.value)}
             />
 
-            <div className="mt-4 h-16" aria-hidden="true" />
+            <div className="mt-4 h-24 sm:h-20" aria-hidden="true" />
           </section>
 
           <div className="hidden lg:flex lg:w-4 lg:flex-none lg:items-stretch lg:justify-center">
@@ -571,10 +580,10 @@ function Dashboard() {
             />
           </div>
 
-          <section style={{ flexBasis: `${100 - leftPanelWidth}%` }} className={`rounded-2xl border p-4 backdrop-blur ${panelClass} h-[760px] min-w-0 flex flex-col lg:flex-none`}>
-            <div className="mb-3 flex items-center justify-between">
+          <section style={isDesktopLayout ? { flexBasis: `${100 - leftPanelWidth}%` } : undefined} className={`rounded-2xl border p-3 sm:p-4 backdrop-blur ${panelClass} min-h-[560px] lg:h-[760px] min-w-0 flex flex-col lg:flex-none`}>
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="font-medium">Review Studio</h2>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {reviewResult && <button className={`rounded-lg border px-3 py-1 text-xs ${theme === "light" ? "border-slate-500 bg-white text-slate-800" : "border-slate-700 bg-slate-900 text-slate-200"}`} onClick={() => navigator.clipboard.writeText(buildCopyText(reviewResult))}><Copy className="mr-1 inline h-3.5 w-3.5" />Copy All</button>}
                 {isLoggedIn && <button className={`rounded-lg border px-3 py-1 text-xs ${theme === "light" ? "border-slate-500 bg-white text-slate-800" : "border-slate-700 bg-slate-900 text-slate-200"}`} onClick={openHistory}>Open History</button>}
               </div>
@@ -634,19 +643,19 @@ function Dashboard() {
       </div>
 
 
-      <div className="fixed inset-x-0 bottom-6 z-20 flex justify-center px-4 pointer-events-none">
-        <div className={`pointer-events-auto flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur ${theme === "light" ? "border-2 border-sky-200 bg-white/94" : "border-slate-700 bg-slate-900/92"}`}>
-          <button onClick={() => runAction("review")} disabled={Boolean(loadingAction)} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50">{loadingAction === "review" ? "Reviewing..." : "Review"}</button>
-          <button onClick={() => runAction("hint")} disabled={Boolean(loadingAction)} className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50">{loadingAction === "hint" ? "Thinking..." : "Hint"}</button>
-          <button onClick={() => runAction("complexity")} disabled={Boolean(loadingAction)} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50">{loadingAction === "complexity" ? "Analyzing..." : "Complexity"}</button>
-          <button onClick={() => runAction("fix")} disabled={Boolean(loadingAction)} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50">{loadingAction === "fix" ? "Fixing..." : "Fix Code"}</button>
+      <div className="fixed inset-x-0 bottom-4 z-20 flex justify-center px-3 sm:bottom-6 sm:px-4 pointer-events-none">
+        <div className={`pointer-events-auto flex w-full max-w-[720px] flex-wrap items-center justify-center gap-2 rounded-2xl border px-3 py-3 shadow-2xl backdrop-blur sm:gap-3 sm:px-4 ${theme === "light" ? "border-2 border-slate-500 bg-white/94" : "border-slate-700 bg-slate-900/92"}`}>
+          <button onClick={() => runAction("review")} disabled={Boolean(loadingAction)} className="min-w-[132px] flex-1 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none">{loadingAction === "review" ? "Reviewing..." : "Review"}</button>
+          <button onClick={() => runAction("hint")} disabled={Boolean(loadingAction)} className="min-w-[132px] flex-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none">{loadingAction === "hint" ? "Thinking..." : "Hint"}</button>
+          <button onClick={() => runAction("complexity")} disabled={Boolean(loadingAction)} className="min-w-[132px] flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none">{loadingAction === "complexity" ? "Analyzing..." : "Complexity"}</button>
+          <button onClick={() => runAction("fix")} disabled={Boolean(loadingAction)} className="min-w-[132px] flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none">{loadingAction === "fix" ? "Fixing..." : "Fix Code"}</button>
         </div>
       </div>
       <div className={`fixed inset-0 z-40 bg-black/45 transition-opacity ${showHistory ? "opacity-100" : "pointer-events-none opacity-0"}`} onClick={() => setShowHistory(false)} />
-      <aside className={`fixed inset-y-0 left-0 z-50 w-[380px] border-r p-4 backdrop-blur transition-transform duration-300 ${showHistory ? "translate-x-0" : "-translate-x-full"} ${theme === "light" ? "border-2 border-slate-500 bg-white/96 text-slate-900" : "border-slate-800 bg-slate-950/95 text-slate-100"}`}>
-        <div className="mb-3 flex items-center justify-between">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-full max-w-[380px] border-r p-4 backdrop-blur transition-transform duration-300 ${showHistory ? "translate-x-0" : "-translate-x-full"} ${theme === "light" ? "border-2 border-slate-500 bg-white/96 text-slate-900" : "border-slate-800 bg-slate-950/95 text-slate-100"}`}>
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-sm font-semibold tracking-wide">History</h3>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button className={`rounded px-2 py-1 text-xs ${theme === "light" ? "bg-slate-100 hover:bg-slate-200" : "bg-slate-800 hover:bg-slate-700"}`} onClick={handleClearHistory}>Clear All</button>
             <button className={`rounded px-2 py-1 text-xs ${theme === "light" ? "bg-slate-100 hover:bg-slate-200" : "bg-slate-800 hover:bg-slate-700"}`} onClick={() => setShowHistory(false)}>Close</button>
           </div>
@@ -705,7 +714,7 @@ function Dashboard() {
             <input type="password" placeholder="New password" value={pwdForm.new_password} onChange={(e) => setPwdForm((prev) => ({ ...prev, new_password: e.target.value }))} className={`mb-3 w-full rounded border p-3 text-sm ${theme === "light" ? "border-slate-300 bg-white" : "border-slate-700 bg-slate-800"}`} />
             <input type="password" placeholder="Confirm new password" value={pwdForm.confirm_new_password} onChange={(e) => setPwdForm((prev) => ({ ...prev, confirm_new_password: e.target.value }))} className={`mb-3 w-full rounded border p-3 text-sm ${theme === "light" ? "border-slate-300 bg-white" : "border-slate-700 bg-slate-800"}`} />
             {pwdMessage && <p className="mb-3 text-sm text-cyan-400">{pwdMessage}</p>}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button onClick={submitPasswordChange} disabled={pwdLoading} className="flex items-center gap-2 rounded bg-cyan-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60">
                 {pwdLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-transparent" />}
                 Update
@@ -736,6 +745,7 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
 
 
 
