@@ -446,10 +446,15 @@ function Dashboard() {
       <div className={`pointer-events-none fixed inset-0 ${theme === "light" ? "bg-[radial-gradient(circle_at_12%_14%,rgba(56,189,248,0.18),transparent_36%),radial-gradient(circle_at_82%_10%,rgba(16,185,129,0.12),transparent_38%),linear-gradient(180deg,rgba(248,251,255,0.92),rgba(237,244,251,0.72))]" : "bg-[radial-gradient(circle_at_12%_16%,rgba(34,211,238,0.16),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(59,130,246,0.14),transparent_42%)]"}`} />
 
       <header className={`fixed inset-x-0 top-0 z-30 border-b backdrop-blur ${shellClass}`}>
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 p-3 sm:p-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
-          <Logo theme={theme} />
+        <div className="mx-auto flex max-w-7xl items-start justify-between gap-3 p-3 sm:p-4 md:px-6">
+          <div className="min-w-0 flex-1">
+            <Logo theme={theme} />
+            <div className={`mt-2 inline-flex rounded-lg border px-3 py-1.5 text-center text-[11px] sm:text-xs ${theme === "light" ? "border-slate-300 bg-white text-slate-600" : "border-slate-800 bg-slate-900 text-slate-300"}`}>
+              {authLoading || sessionLoading ? "Loading session..." : statusText}
+            </div>
+          </div>
 
-          <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:gap-3 lg:w-auto lg:flex-nowrap lg:justify-end">
+          <div className="flex shrink-0 items-start gap-2 sm:gap-3">
             <button
               onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
               className={`rounded-lg border px-3 py-2 text-sm ${theme === "light" ? "border-slate-300 bg-white text-slate-700" : "border-slate-700 bg-slate-800 text-slate-200"}`}
@@ -457,21 +462,17 @@ function Dashboard() {
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
 
-            <div className={`order-3 mx-auto rounded-lg border px-3 py-1.5 text-center text-[11px] sm:order-none sm:mx-0 sm:w-auto sm:text-xs ${theme === "light" ? "border-slate-300 bg-white text-slate-600" : "border-slate-800 bg-slate-900 text-slate-300"}`}>
-              {authLoading || sessionLoading ? "Loading session..." : statusText}
-            </div>
-
             {!isLoggedIn ? (
-              <div className="flex items-center gap-2 sm:ml-auto">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setAuthMode("login"); setShowAuth(true); }}
-                  className={`rounded-lg border px-4 py-2 text-sm font-medium ${theme === "light" ? "border-sky-300 bg-white text-sky-900 hover:bg-sky-50" : "border-slate-700 bg-slate-800 text-slate-100"}`}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium sm:px-4 ${theme === "light" ? "border-sky-300 bg-white text-sky-900 hover:bg-sky-50" : "border-slate-700 bg-slate-800 text-slate-100"}`}
                 >
                   Login
                 </button>
                 <button
                   onClick={() => { setAuthMode("register"); setShowAuth(true); }}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium ${theme === "light" ? "bg-emerald-500 text-white hover:bg-emerald-400" : "bg-cyan-500 text-slate-950 hover:bg-cyan-400"}`}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium sm:px-4 ${theme === "light" ? "bg-emerald-500 text-white hover:bg-emerald-400" : "bg-cyan-500 text-slate-950 hover:bg-cyan-400"}`}
                 >
                   Register
                 </button>
@@ -483,7 +484,7 @@ function Dashboard() {
                   className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${theme === "light" ? "border-slate-300 bg-white text-slate-800" : "border-slate-700 bg-slate-800 text-slate-100"}`}
                 >
                   <UserRound className="h-4 w-4" />
-                  Settings
+                  Profile
                   <ChevronDown className={`h-4 w-4 transition ${showMenu ? "rotate-180" : ""}`} />
                 </button>
 
@@ -580,7 +581,7 @@ function Dashboard() {
             </div>
 
             <textarea
-              className={`mt-4 h-32 w-full resize-none rounded-xl border p-3 outline-none transition ${theme === "light" ? "border-2 border-slate-500 bg-[#fdfefe] text-slate-900 focus:border-slate-700" : "border-slate-800 bg-slate-950 text-slate-100 focus:border-cyan-400"}`}
+              className={`mt-4 h-40 sm:h-36 w-full resize-none rounded-xl border p-3 outline-none transition ${theme === "light" ? "border-2 border-slate-500 bg-[#fdfefe] text-slate-900 focus:border-slate-700" : "border-slate-800 bg-slate-950 text-slate-100 focus:border-cyan-400"}`}
               placeholder="Problem description"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -763,6 +764,8 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
+
 
 
 
