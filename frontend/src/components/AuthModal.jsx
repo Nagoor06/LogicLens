@@ -35,7 +35,8 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const [name, setName] = useState("");
   const [captcha, setCaptcha] = useState(createCaptcha());
   const [captchaAnswer, setCaptchaAnswer] = useState("");
-  const [error, setError] = useState("");
+  const [validationError, setValidationError] = useState("");
+  const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [liveValidation, setLiveValidation] = useState(false);
@@ -45,6 +46,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const submitClass = isLogin ? "bg-cyan-500 text-slate-950 hover:bg-cyan-400" : "bg-emerald-500 text-slate-950 hover:bg-emerald-400";
   const accentClass = isLogin ? "text-cyan-300 hover:text-cyan-200" : "text-emerald-300 hover:text-emerald-200";
   const helperBadge = useMemo(() => (isLogin ? "Secure sign in" : "Create your workspace access"), [isLogin]);
+  const errorMessage = validationError || serverError;
 
   const resetAllFields = (nextMode = mode) => {
     setMode(nextMode);
@@ -54,7 +56,8 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
     setName("");
     setCaptcha(createCaptcha());
     setCaptchaAnswer("");
-    setError("");
+    setValidationError("");
+    setServerError("");
     setSuccessMessage("");
     setLiveValidation(false);
   };
@@ -104,13 +107,14 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
 
   useEffect(() => {
     if (!liveValidation) return;
-    const validationError = isLogin ? validateLogin() : validateRegister();
-    setError(validationError);
+    const nextValidationError = isLogin ? validateLogin() : validateRegister();
+    setValidationError(nextValidationError);
   }, [liveValidation, isLogin, email, password, confirmPassword, name]);
 
   const validateHumanCheck = () => {
     if (Number(captchaAnswer) !== captcha.answer) {
-      setError("Human verification failed. Solve the math question correctly.");
+      setValidationError("Human verification failed. Solve the math question correctly.");
+      setServerError("");
       clearPasswords();
       return false;
     }
@@ -121,15 +125,17 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
     setter(event.target.value);
     if (!liveValidation) setLiveValidation(true);
     if (successMessage) setSuccessMessage("");
+    if (serverError) setServerError("");
   };
 
   const login = async () => {
     setLiveValidation(true);
     setSuccessMessage("");
+    setServerError("");
 
-    const validationError = validateLogin();
-    if (validationError) {
-      setError(validationError);
+    const nextValidationError = validateLogin();
+    setValidationError(nextValidationError);
+    if (nextValidationError) {
       refreshCaptcha();
       return;
     }
@@ -138,7 +144,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
       return;
     }
 
-    setError("");
+    setValidationError("");
     setLoading(true);
     try {
       const res = await loginUser({ email: email.trim(), password });
@@ -146,8 +152,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
       close();
       onAuthSuccess?.(res.data);
     } catch (err) {
-      setError(normalizeError(err, "Invalid login credentials."));
-      clearPasswords();
+      setServerError(normalizeError(err, "Invalid login credentials."));
     } finally {
       refreshCaptcha();
       setLoading(false);
@@ -157,10 +162,11 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const register = async () => {
     setLiveValidation(true);
     setSuccessMessage("");
+    setServerError("");
 
-    const validationError = validateRegister();
-    if (validationError) {
-      setError(validationError);
+    const nextValidationError = validateRegister();
+    setValidationError(nextValidationError);
+    if (nextValidationError) {
       refreshCaptcha();
       return;
     }
@@ -169,7 +175,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
       return;
     }
 
-    setError("");
+    setValidationError("");
     setLoading(true);
     try {
       await registerUser({
@@ -181,7 +187,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
       resetAllFields("login");
       setSuccessMessage("Account created. Please login.");
     } catch (err) {
-      setError(normalizeError(err, "Registration failed."));
+      setServerError(normalizeError(err, "Registration failed."));
       clearPasswords();
     } finally {
       refreshCaptcha();
@@ -259,7 +265,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
           </p>
         )}
 
-        {error && <p className="mb-3 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+        {errorMessage && <p className="mb-3 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{errorMessage}</p>}
         {successMessage && <p className="mb-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{successMessage}</p>}
 
         <button disabled={loading} onClick={submit} className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition disabled:opacity-60 ${submitClass}`}>
@@ -276,4 +282,3 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
 }
 
 export default AuthModal;
-
