@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     GROQ_TIMEOUT_SECONDS: int = 60
     REVIEW_RATE_LIMIT_PER_MINUTE: int = 5
     MAX_CONCURRENT_AI_REVIEWS: int = 16
-    FRONTEND_ORIGIN: str = "http://localhost:5173"
+    FRONTEND_ORIGINS: str = "http://localhost:5173,https://logic-lens-five.vercel.app"
 
     if SETTINGS_STYLE == "v2":
         model_config = {
@@ -30,6 +30,10 @@ class Settings(BaseSettings):
         class Config:
             env_file = ".env"
             extra = "ignore"
+
+    @property
+    def frontend_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.FRONTEND_ORIGINS.split(",") if origin.strip()]
 
 
 settings = Settings()
