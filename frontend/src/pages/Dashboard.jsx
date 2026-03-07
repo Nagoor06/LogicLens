@@ -585,13 +585,13 @@ function Dashboard() {
             </div>
 
             <textarea
-              className={`mt-4 h-40 sm:h-36 w-full resize-none rounded-xl border p-3 outline-none transition ${theme === "light" ? "border-2 border-slate-500 bg-[#fdfefe] text-slate-900 focus:border-slate-700" : "border-slate-800 bg-slate-950 text-slate-100 focus:border-cyan-400"}`}
+              className={`mt-4 min-h-[180px] flex-1 w-full resize-none rounded-xl border p-3 outline-none transition ${theme === "light" ? "border-2 border-slate-500 bg-[#fdfefe] text-slate-900 focus:border-slate-700" : "border-slate-800 bg-slate-950 text-slate-100 focus:border-cyan-400"}`}
               placeholder="Problem description"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
             />
 
-            <div className="mt-4 h-32 sm:h-20" aria-hidden="true" />
+            <div className="mt-3 h-16 sm:h-14" aria-hidden="true" />
           </section>
 
           <div className="hidden lg:flex lg:w-4 lg:flex-none lg:items-stretch lg:justify-center">
@@ -768,6 +768,8 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
+
 
 
 
