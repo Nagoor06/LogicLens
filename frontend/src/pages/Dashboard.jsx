@@ -128,7 +128,9 @@ function Dashboard() {
   const gateTimerRef = useRef(null);
   const workspaceRef = useRef(null);
   const token = localStorage.getItem("token");
-  const isLoggedIn = Boolean(token && user);
+  const hasToken = Boolean(token);
+  const isSessionPending = hasToken && authLoading && !user;
+  const isLoggedIn = Boolean(hasToken && user);
   const detectedLanguage = useMemo(() => detectLanguageFromCode(sanitizeCodeInput(code)), [code]);
   const editorLanguage = language === "auto" ? detectedLanguage : language;
 
@@ -462,7 +464,7 @@ function Dashboard() {
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
 
-            {!isLoggedIn ? (
+            {!isLoggedIn && !isSessionPending ? (
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setAuthMode("login"); setShowAuth(true); }}
@@ -534,6 +536,8 @@ function Dashboard() {
         <div className={`mb-3 rounded-2xl border px-3 py-2 text-[11px] leading-5 shadow-[0_0_30px_rgba(34,211,238,0.08)] sm:mb-4 sm:px-4 sm:py-3 sm:text-sm ${theme === "light" ? "border-slate-400 bg-gradient-to-r from-slate-100 via-white to-blue-50 text-slate-800" : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100"}`}>
           {isLoggedIn ? (
             <span>Welcome back, <span className="font-semibold">{user.name}</span>. Review focused on core DSA correctness and algorithm quality.</span>
+          ) : isSessionPending ? (
+            <span>Restoring your workspace...</span>
           ) : (
             <span>Login to review code, manage history, save favorites, and personalize your profile.</span>
           )}
@@ -609,7 +613,7 @@ function Dashboard() {
             </div>
 
             <div className={`flex-1 overflow-y-auto rounded-xl border p-4 text-sm ${surfaceClass}`}>
-              {!isLoggedIn ? (
+              {!isLoggedIn && !isSessionPending ? (
                 <div className="flex h-full items-center justify-center text-center text-lg font-semibold opacity-85">Login or register to start a review.</div>
               ) : loadingAction ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 text-center"><span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-500 border-t-cyan-300" /><div><p className="font-medium">{authLoading || sessionLoading ? "Loading session..." : statusText}</p><p className="mt-1 text-xs opacity-70">Thinking through your code now.</p></div></div>
@@ -764,6 +768,7 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
 
 
 
