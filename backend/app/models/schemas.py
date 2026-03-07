@@ -1,17 +1,26 @@
 import re
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 PASSWORD_REGEX = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$")
+EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 class UserCreate(BaseModel):
     name: str = Field(min_length=2, max_length=80)
-    email: EmailStr
+    email: str
     password: str = Field(min_length=8, max_length=128)
     confirm_password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not EMAIL_REGEX.match(email):
+            raise ValueError("Enter a valid email address.")
+        return email
 
     @model_validator(mode="after")
     def validate_passwords(self):
@@ -27,8 +36,16 @@ class UserCreate(BaseModel):
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not EMAIL_REGEX.match(email):
+            raise ValueError("Enter a valid email address.")
+        return email
 
 
 class PasswordChangeRequest(BaseModel):
@@ -55,7 +72,7 @@ class ProfileUpdateRequest(BaseModel):
 
 class UserSummary(BaseModel):
     id: int
-    email: EmailStr
+    email: str
     name: str
 
 
