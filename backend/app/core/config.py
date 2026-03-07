@@ -1,4 +1,11 @@
-from pydantic_settings import BaseSettings
+try:
+    from pydantic_settings import BaseSettings
+
+    SETTINGS_STYLE = "v2"
+except ModuleNotFoundError:
+    from pydantic.v1 import BaseSettings
+
+    SETTINGS_STYLE = "v1"
 
 
 class Settings(BaseSettings):
@@ -14,10 +21,15 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_AI_REVIEWS: int = 16
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 
-    model_config = {
-        "env_file": ".env",
-        "extra": "ignore",
-    }
+    if SETTINGS_STYLE == "v2":
+        model_config = {
+            "env_file": ".env",
+            "extra": "ignore",
+        }
+    else:
+        class Config:
+            env_file = ".env"
+            extra = "ignore"
 
 
 settings = Settings()
