@@ -1,12 +1,30 @@
 import logging
-from typing import Generator, Iterable
+from typing import Generator, Iterable, Optional
 
 from groq import Groq
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-client = Groq(api_key=settings.GROQ_API_KEY)
+_client: Optional[Groq] = None
+_client_init_failed = False
+
+
+def _get_client() -> Groq:
+    global _client, _client_init_failed
+
+    if _client is not None:
+        return _client
+    if _client_init_failed:
+        raise RuntimeError("Groq client initialization previously failed")
+
+    try:
+        _client = Groq(api_key=settings.GROQ_API_KEY)
+        return _client
+    except Exception as exc:
+        _client_init_failed = True
+        logger.exception("Groq client initialization failed: %s", exc)
+        raise
 
 
 def _fallback_response() -> str:
@@ -22,6 +40,7 @@ def _fallback_response() -> str:
 
 def call_llm(prompt: str) -> str:
     try:
+        client = _get_client()
         response = client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -38,6 +57,7 @@ def call_llm(prompt: str) -> str:
 
 def stream_llm(prompt: str) -> Generator[str, None, None]:
     try:
+        client = _get_client()
         response_stream: Iterable = client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
