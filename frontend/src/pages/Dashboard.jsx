@@ -123,6 +123,7 @@ function Dashboard() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => Number(localStorage.getItem("logiclens:left-panel-width") || 55));
   const [isResizingPanels, setIsResizingPanels] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => (typeof window !== "undefined" ? window.innerWidth >= 1024 : true));
+  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 640 : false));
 
   const gateTimerRef = useRef(null);
   const workspaceRef = useRef(null);
@@ -163,11 +164,18 @@ function Dashboard() {
   }, [leftPanelWidth]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 1024px)");
-    const syncLayout = (event) => setIsDesktopLayout(event.matches);
-    setIsDesktopLayout(mediaQuery.matches);
-    mediaQuery.addEventListener("change", syncLayout);
-    return () => mediaQuery.removeEventListener("change", syncLayout);
+    const desktopQuery = window.matchMedia("(min-width: 1024px)");
+    const mobileQuery = window.matchMedia("(max-width: 639px)");
+    const syncDesktop = (event) => setIsDesktopLayout(event.matches);
+    const syncMobile = (event) => setIsMobileLayout(event.matches);
+    setIsDesktopLayout(desktopQuery.matches);
+    setIsMobileLayout(mobileQuery.matches);
+    desktopQuery.addEventListener("change", syncDesktop);
+    mobileQuery.addEventListener("change", syncMobile);
+    return () => {
+      desktopQuery.removeEventListener("change", syncDesktop);
+      mobileQuery.removeEventListener("change", syncMobile);
+    };
   }, []);
 
   useEffect(() => {
@@ -438,7 +446,7 @@ function Dashboard() {
       <div className={`pointer-events-none fixed inset-0 ${theme === "light" ? "bg-[radial-gradient(circle_at_12%_14%,rgba(56,189,248,0.18),transparent_36%),radial-gradient(circle_at_82%_10%,rgba(16,185,129,0.12),transparent_38%),linear-gradient(180deg,rgba(248,251,255,0.92),rgba(237,244,251,0.72))]" : "bg-[radial-gradient(circle_at_12%_16%,rgba(34,211,238,0.16),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(59,130,246,0.14),transparent_42%)]"}`} />
 
       <header className={`fixed inset-x-0 top-0 z-30 border-b backdrop-blur ${shellClass}`}>
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 p-3 sm:p-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 p-3 sm:p-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
           <Logo theme={theme} />
 
           <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:gap-3 lg:w-auto lg:flex-nowrap lg:justify-end">
@@ -449,7 +457,7 @@ function Dashboard() {
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
 
-            <div className={`order-3 w-full rounded-lg border px-3 py-2 text-center text-xs sm:order-none sm:w-auto ${theme === "light" ? "border-slate-300 bg-white text-slate-600" : "border-slate-800 bg-slate-900 text-slate-300"}`}>
+            <div className={`order-3 mx-auto rounded-lg border px-3 py-1.5 text-center text-[11px] sm:order-none sm:mx-0 sm:w-auto sm:text-xs ${theme === "light" ? "border-slate-300 bg-white text-slate-600" : "border-slate-800 bg-slate-900 text-slate-300"}`}>
               {authLoading || sessionLoading ? "Loading session..." : statusText}
             </div>
 
@@ -521,8 +529,8 @@ function Dashboard() {
         </div>
       )}
 
-      <div className="relative mx-auto max-w-[1380px] px-3 pb-0 pt-36 sm:px-4 sm:pt-32 md:px-6 md:pt-28 lg:pr-10 xl:pr-14">
-        <div className={`mb-4 rounded-2xl border px-4 py-3 text-sm shadow-[0_0_30px_rgba(34,211,238,0.08)] ${theme === "light" ? "border-slate-400 bg-gradient-to-r from-slate-100 via-white to-blue-50 text-slate-800" : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100"}`}>
+      <div className="relative mx-auto max-w-[1380px] px-3 pb-0 pt-28 sm:px-4 sm:pt-30 md:px-6 md:pt-28 lg:pr-10 xl:pr-14">
+        <div className={`mb-3 rounded-2xl border px-3 py-2 text-[11px] leading-5 shadow-[0_0_30px_rgba(34,211,238,0.08)] sm:mb-4 sm:px-4 sm:py-3 sm:text-sm ${theme === "light" ? "border-slate-400 bg-gradient-to-r from-slate-100 via-white to-blue-50 text-slate-800" : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100"}`}>
           {isLoggedIn ? (
             <span>Welcome back, <span className="font-semibold">{user.name}</span>. Review focused on core DSA correctness and algorithm quality.</span>
           ) : (
@@ -531,7 +539,7 @@ function Dashboard() {
         </div>
 
         <main ref={workspaceRef} className="flex flex-col gap-4 lg:flex-row">
-          <section style={isDesktopLayout ? { flexBasis: `${leftPanelWidth}%` } : undefined} className={`rounded-2xl border p-3 sm:p-4 backdrop-blur ${panelClass} min-h-[640px] lg:h-[760px] min-w-0 flex flex-col lg:flex-none`}>
+          <section style={isDesktopLayout ? { flexBasis: `${leftPanelWidth}%` } : undefined} className={`rounded-2xl border p-3 sm:p-4 backdrop-blur ${panelClass} min-h-[620px] lg:h-[760px] min-w-0 flex flex-col lg:flex-none`}>
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="font-medium">Editor</h2>
               <div className="flex items-center gap-3 text-xs opacity-80">
@@ -550,15 +558,25 @@ function Dashboard() {
               </div>
             </div>
 
-            <div className={`min-h-[320px] flex-1 overflow-hidden rounded-xl border ${theme === "light" ? "border-2 border-slate-500" : "border-slate-800"}`}>
-              <Editor
-                height="100%"
-                theme={theme === "light" ? "vs" : "vs-dark"}
-                language={editorLanguage}
-                value={code}
-                onChange={(v) => setCode(v || "")}
-                options={{ automaticLayout: true, minimap: { enabled: false }, scrollBeyondLastLine: false, fontSize: 14, padding: { top: 14 } }}
-              />
+            <div className={`h-[360px] sm:h-[420px] lg:h-auto lg:flex-1 overflow-hidden rounded-xl border ${theme === "light" ? "border-2 border-slate-500" : "border-slate-800"}`}>
+              {isMobileLayout ? (
+                <textarea
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  spellCheck={false}
+                  placeholder="Paste or write code here"
+                  className={`h-full w-full resize-none border-0 bg-transparent p-3 font-mono text-[13px] leading-6 outline-none ${theme === "light" ? "text-slate-900 placeholder:text-slate-500" : "text-slate-100 placeholder:text-slate-500"}`}
+                />
+              ) : (
+                <Editor
+                  height="100%"
+                  theme={theme === "light" ? "vs" : "vs-dark"}
+                  language={editorLanguage}
+                  value={code}
+                  onChange={(v) => setCode(v || "")}
+                  options={{ automaticLayout: true, minimap: { enabled: false }, scrollBeyondLastLine: false, fontSize: 14, padding: { top: 14 } }}
+                />
+              )}
             </div>
 
             <textarea
@@ -568,7 +586,7 @@ function Dashboard() {
               onChange={(e) => setQuestion(e.target.value)}
             />
 
-            <div className="mt-4 h-24 sm:h-20" aria-hidden="true" />
+            <div className="mt-4 h-28 sm:h-20" aria-hidden="true" />
           </section>
 
           <div className="hidden lg:flex lg:w-4 lg:flex-none lg:items-stretch lg:justify-center">
@@ -745,6 +763,8 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
+
 
 
 
