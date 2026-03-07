@@ -529,7 +529,7 @@ function Dashboard() {
         </div>
       )}
 
-      <div className="relative mx-auto max-w-[1380px] px-3 pb-0 pt-28 sm:px-4 sm:pt-30 md:px-6 md:pt-28 lg:pr-10 xl:pr-14">
+      <div className="relative mx-auto max-w-[1380px] px-3 pb-0 pt-32 sm:px-4 sm:pt-30 md:px-6 md:pt-28 lg:pr-10 xl:pr-14">
         <div className={`mb-3 rounded-2xl border px-3 py-2 text-[11px] leading-5 shadow-[0_0_30px_rgba(34,211,238,0.08)] sm:mb-4 sm:px-4 sm:py-3 sm:text-sm ${theme === "light" ? "border-slate-400 bg-gradient-to-r from-slate-100 via-white to-blue-50 text-slate-800" : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100"}`}>
           {isLoggedIn ? (
             <span>Welcome back, <span className="font-semibold">{user.name}</span>. Review focused on core DSA correctness and algorithm quality.</span>
@@ -586,7 +586,7 @@ function Dashboard() {
               onChange={(e) => setQuestion(e.target.value)}
             />
 
-            <div className="mt-4 h-28 sm:h-20" aria-hidden="true" />
+            <div className="mt-4 h-32 sm:h-20" aria-hidden="true" />
           </section>
 
           <div className="hidden lg:flex lg:w-4 lg:flex-none lg:items-stretch lg:justify-center">
@@ -763,6 +763,7 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
 
 
 
