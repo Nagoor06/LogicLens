@@ -5,11 +5,10 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api import analytics, auth, history, review as review_api
+from app.api import auth, history, review as review_api
 from app.core.config import settings
 from app.core.security import get_current_user
 from app.db import Base, engine
-from app.models import review, session, user
 from app.models.email_verification import EmailVerificationToken
 from app.models.pending_registration import PendingRegistration
 from app.models.review import Review
@@ -24,7 +23,7 @@ logging.basicConfig(
 
 app = FastAPI(
     title="LogicLens API",
-    description="AI-powered code review platform with structured LLM feedback, analytics, and user-specific history.",
+    description="AI-powered code review platform with structured LLM feedback and user-specific history.",
     version="1.0.0",
 )
 app.add_middleware(
@@ -57,7 +56,6 @@ for index in CodeSession.__table__.indexes.union(Review.__table__.indexes):
 app.include_router(auth.router)
 app.include_router(review_api.router)
 app.include_router(history.router)
-app.include_router(analytics.router)
 
 
 @app.get("/")
