@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     HISTORY_CACHE_SECONDS: int = 45
     GOOGLE_CLIENT_ID: str = ""
     FRONTEND_ORIGINS: str = "http://localhost:5173"
+    FRONTEND_APP_URL: str = "http://localhost:5173"
+    EMAIL_VERIFICATION_EXPIRE_MINUTES: int = 60
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True
+    EMAIL_FROM: str = ""
 
     if SETTINGS_STYLE == "v2":
         model_config = {
@@ -47,4 +55,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

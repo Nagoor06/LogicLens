@@ -82,10 +82,28 @@ class ProfileUpdateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=80)
 
 
+class EmailVerificationRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=255)
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not EMAIL_REGEX.match(email):
+            raise ValueError("Enter a valid email address.")
+        return email
+
+
 class UserSummary(BaseModel):
     id: int
     email: str
     name: str
+    is_verified: bool = True
+    auth_provider: str = "email"
 
 
 class Token(BaseModel):

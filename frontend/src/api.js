@@ -144,6 +144,8 @@ export const googleLoginUser = async (payload) => {
   invalidateApiCache(["me", "history"]);
   return response;
 };
+export const verifyEmailToken = (payload) => API.post("/auth/verify-email", payload);
+export const resendVerificationEmail = (payload) => API.post("/auth/resend-verification", payload);
 export const changePassword = (payload) => API.post("/auth/change-password", payload);
 export const updateProfile = async (payload) => {
   const response = await API.put("/auth/profile", payload);

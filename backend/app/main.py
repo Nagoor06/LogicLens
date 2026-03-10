@@ -1,4 +1,5 @@
 import logging
+from sqlalchemy import inspect, text
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,8 @@ from app.core.config import settings
 from app.core.security import get_current_user
 from app.db import Base, engine
 from app.models import review, session, user
+from app.models.email_verification import EmailVerificationToken
+from app.models.pending_registration import PendingRegistration
 from app.models.review import Review
 from app.models.session import CodeSession
 from app.models.user import User
@@ -33,6 +36,21 @@ app.add_middleware(
 )
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_auth_schema():
+    inspector = inspect(engine)
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    with engine.begin() as connection:
+        if "is_verified" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE"))
+            connection.execute(text("UPDATE users SET is_verified = TRUE WHERE is_verified IS NULL"))
+        if "auth_provider" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN auth_provider VARCHAR(20) DEFAULT 'email'"))
+            connection.execute(text("UPDATE users SET auth_provider = 'email' WHERE auth_provider IS NULL OR auth_provider = ''"))
+
+
+ensure_auth_schema()
 for index in CodeSession.__table__.indexes.union(Review.__table__.indexes):
     index.create(bind=engine, checkfirst=True)
 
@@ -56,5 +74,7 @@ def read_current_user(current_user: User = Depends(get_current_user)):
             "id": current_user.id,
             "email": current_user.email,
             "name": current_user.name,
+            "is_verified": bool(current_user.is_verified),
+            "auth_provider": current_user.auth_provider or "email",
         },
     )

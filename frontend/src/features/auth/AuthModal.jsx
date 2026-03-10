@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { resendVerificationEmail } from "../../api";
 import { continueWithGoogle, loginWithEmail, registerWithEmail } from "./auth.api";
 import { validateLoginInput, validateRegisterInput } from "./auth.validators";
 
@@ -43,8 +44,10 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const [validationError, setValidationError] = useState("");
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [verificationHint, setVerificationHint] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const [liveValidation, setLiveValidation] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
   const tokenClientRef = useRef(null);
@@ -55,7 +58,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const submitClass = isLogin ? "bg-cyan-500 text-slate-950 hover:bg-cyan-400" : "bg-emerald-500 text-slate-950 hover:bg-emerald-400";
   const accentClass = isLogin ? "text-cyan-300 hover:text-cyan-200" : "text-emerald-300 hover:text-emerald-200";
   const helperBadge = useMemo(() => (isLogin ? "Secure sign in" : "Create your workspace access"), [isLogin]);
-  const errorMessage = validationError || serverError;
+  const errorMessage = serverError || validationError;
   const hasGoogleConfig = Boolean(GOOGLE_CLIENT_ID);
   const currentOrigin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
   const isOriginAllowed = typeof window !== "undefined" && (GOOGLE_ALLOWED_ORIGINS.length === 0 || GOOGLE_ALLOWED_ORIGINS.includes(currentOrigin));
@@ -75,8 +78,10 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
     setValidationError("");
     setServerError("");
     setSuccessMessage("");
+    setVerificationHint("");
     setLiveValidation(false);
     setGoogleLoading(false);
+    setResendLoading(false);
     googleRequestInFlightRef.current = false;
   }, []);
 
@@ -88,6 +93,24 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const clearPasswords = useCallback(() => {
     setPassword("");
     setConfirmPassword("");
+  }, []);
+
+  const transitionToLoginSuccess = useCallback((message) => {
+    setMode("login");
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+    setName("");
+    setCaptcha(createCaptcha());
+    setCaptchaAnswer("");
+    setValidationError("");
+    setServerError("");
+    setVerificationHint("");
+    setLiveValidation(false);
+    setGoogleLoading(false);
+    setResendLoading(false);
+    setSuccessMessage(message);
+    googleRequestInFlightRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -213,6 +236,27 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
     if (!liveValidation) setLiveValidation(true);
     if (successMessage) setSuccessMessage("");
     if (serverError) setServerError("");
+    if (verificationHint) setVerificationHint("");
+  };
+
+  const handleResendVerification = async () => {
+    if (!email.trim()) {
+      setServerError("Enter your email to resend the verification link.");
+      return;
+    }
+
+    setResendLoading(true);
+    try {
+      const res = await resendVerificationEmail({ email: email.trim() });
+      const fallback = res.data?.verification_token ? ` Verification token for local/dev: ${res.data.verification_token}` : "";
+      setSuccessMessage((res.data?.message || "Verification email sent.") + fallback);
+      setServerError("");
+      setVerificationHint("");
+    } catch (err) {
+      setServerError(normalizeError(err, "Unable to resend verification email."));
+    } finally {
+      setResendLoading(false);
+    }
   };
 
   const login = async () => {
@@ -239,7 +283,9 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
       close();
       onAuthSuccess?.(res.data);
     } catch (err) {
-      setServerError(normalizeError(err, "Invalid login credentials."));
+      const nextError = normalizeError(err, "Invalid login credentials.");
+      setServerError(nextError);
+      setVerificationHint(nextError.includes("verify your email") ? "Verify your email first, then return here to log in." : "");
     } finally {
       refreshCaptcha();
       setLoading(false);
@@ -265,15 +311,16 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
     setValidationError("");
     setLoading(true);
     try {
-      await registerWithEmail({
+      const res = await registerWithEmail({
         name: name.trim(),
         email: email.trim(),
         password,
         confirm_password: confirmPassword,
       });
-      resetAllFields("login");
-      setSuccessMessage("Account created. Please login.");
+      const fallback = res.data?.verification_token ? ` Verification token for local/dev: ${res.data.verification_token}` : "";
+      transitionToLoginSuccess((res.data?.message || "Account created. Please verify your email before logging in.") + fallback);
     } catch (err) {
+      setValidationError("");
       setServerError(normalizeError(err, "Registration failed."));
       clearPasswords();
     } finally {
@@ -381,6 +428,19 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
 
         {errorMessage && <p className="mb-3 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{errorMessage}</p>}
         {successMessage && <p className="mb-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{successMessage}</p>}
+        {verificationHint && (
+          <div className="mb-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-3 text-sm text-amber-200">
+            <p>{verificationHint}</p>
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={resendLoading}
+              className="mt-3 rounded-lg border border-amber-400/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-100 transition hover:border-amber-300 hover:text-white disabled:opacity-60"
+            >
+              {resendLoading ? "Sending..." : "Resend verification email"}
+            </button>
+          </div>
+        )}
 
         <button disabled={loading} onClick={submit} className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition disabled:opacity-60 ${submitClass}`}>
           {loading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-transparent" />}
@@ -396,4 +456,6 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
 }
 
 export default AuthModal;
+
+
 
