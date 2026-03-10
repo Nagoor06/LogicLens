@@ -2,16 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg: #020617;
-  --text: #e2e8f0;
-}
-
-:root[data-theme="light"] {
-  --bg: #ece3d4;
-  --text: #0f172a;
-}
-
 * {
   box-sizing: border-box;
 }

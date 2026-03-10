@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { loginUser, registerUser } from "../api";
+import { continueWithGoogle, loginWithEmail, registerWithEmail } from "./auth.api";
+import { validateLoginInput, validateRegisterInput } from "./auth.validators";
 
-const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+const GOOGLE_ALLOWED_ORIGINS = (import.meta.env.VITE_GOOGLE_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const GOOGLE_SCOPES = "openid email profile";
 
 function createCaptcha() {
   const left = Math.floor(Math.random() * 8) + 2;
@@ -39,7 +44,11 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [liveValidation, setLiveValidation] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+  const tokenClientRef = useRef(null);
+  const googleRequestInFlightRef = useRef(false);
 
   const isLogin = mode === "login";
   const panelClass = isLogin ? "border-cyan-500/30 bg-slate-950" : "border-emerald-500/30 bg-slate-950";
@@ -47,8 +56,14 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const accentClass = isLogin ? "text-cyan-300 hover:text-cyan-200" : "text-emerald-300 hover:text-emerald-200";
   const helperBadge = useMemo(() => (isLogin ? "Secure sign in" : "Create your workspace access"), [isLogin]);
   const errorMessage = validationError || serverError;
+  const hasGoogleConfig = Boolean(GOOGLE_CLIENT_ID);
+  const isOriginAllowed = typeof window !== "undefined" && (GOOGLE_ALLOWED_ORIGINS.length === 0 || GOOGLE_ALLOWED_ORIGINS.includes(window.location.origin));
+  const canUseGoogle = hasGoogleConfig && googleReady && isOriginAllowed && !googleLoading;
 
-  const resetAllFields = (nextMode = mode) => {
+  const validateLogin = useCallback(() => validateLoginInput({ email, password }), [email, password]);
+  const validateRegister = useCallback(() => validateRegisterInput({ name, email, password, confirmPassword }), [name, email, password, confirmPassword]);
+
+  const resetAllFields = useCallback((nextMode) => {
     setMode(nextMode);
     setEmail("");
     setPassword("");
@@ -60,56 +75,127 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
     setServerError("");
     setSuccessMessage("");
     setLiveValidation(false);
-  };
+    setGoogleLoading(false);
+    googleRequestInFlightRef.current = false;
+  }, []);
 
-  const refreshCaptcha = () => {
+  const refreshCaptcha = useCallback(() => {
     setCaptcha(createCaptcha());
     setCaptchaAnswer("");
-  };
+  }, []);
 
-  const clearPasswords = () => {
+  const clearPasswords = useCallback(() => {
     setPassword("");
     setConfirmPassword("");
-  };
+  }, []);
 
   useEffect(() => {
     resetAllFields(defaultMode);
-  }, [defaultMode]);
-
-  const validateEmail = () => {
-    if (!email.trim()) return "Email is required.";
-    if (!emailRegex.test(email.trim())) return "Enter a valid email address.";
-    return "";
-  };
-
-  const validateLogin = () => {
-    const emailError = validateEmail();
-    if (emailError) return emailError;
-    if (!password.trim()) return "Password is required.";
-    return "";
-  };
-
-  const validateRegister = () => {
-    if (!name.trim()) return "Name is required.";
-
-    const emailError = validateEmail();
-    if (emailError) return emailError;
-
-    if (!password.trim()) return "Password is required.";
-    if (!passwordRegex.test(password)) {
-      return "Password must be 8+ chars with uppercase, lowercase, number, and special character.";
-    }
-    if (!confirmPassword.trim()) return "Confirm password is required.";
-    if (password !== confirmPassword) return "Password and confirm password do not match.";
-
-    return "";
-  };
+  }, [defaultMode, resetAllFields]);
 
   useEffect(() => {
     if (!liveValidation) return;
     const nextValidationError = isLogin ? validateLogin() : validateRegister();
     setValidationError(nextValidationError);
-  }, [liveValidation, isLogin, email, password, confirmPassword, name]);
+  }, [liveValidation, isLogin, validateLogin, validateRegister]);
+
+  const handleGoogleToken = useCallback(async (tokenResponse) => {
+    googleRequestInFlightRef.current = false;
+
+    if (!tokenResponse?.access_token) {
+      setServerError("Google sign-in did not return an access token.");
+      setGoogleLoading(false);
+      return;
+    }
+
+    setServerError("");
+    setSuccessMessage("");
+    try {
+      const res = await continueWithGoogle({ access_token: tokenResponse.access_token, intent: isLogin ? "login" : "register" });
+      localStorage.setItem("token", res.data.access_token);
+      close();
+      onAuthSuccess?.(res.data);
+    } catch (err) {
+      setServerError(normalizeError(err, "Google sign-in failed."));
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [close, isLogin, onAuthSuccess]);
+
+  useEffect(() => {
+    if (!hasGoogleConfig) {
+      setGoogleReady(false);
+      tokenClientRef.current = null;
+      return undefined;
+    }
+
+    const initializeGoogle = () => {
+      if (!window.google?.accounts?.oauth2) return false;
+      tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_SCOPES,
+        callback: handleGoogleToken,
+        error_callback: () => {
+          googleRequestInFlightRef.current = false;
+          setGoogleLoading(false);
+          setServerError("Google sign-in could not be completed. Please try again.");
+        },
+      });
+      setGoogleReady(true);
+      return true;
+    };
+
+    if (initializeGoogle()) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (initializeGoogle()) {
+        window.clearInterval(intervalId);
+      }
+    }, 250);
+
+    const timeoutId = window.setTimeout(() => {
+      window.clearInterval(intervalId);
+      setGoogleReady(Boolean(window.google?.accounts?.oauth2));
+    }, 8000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+      tokenClientRef.current = null;
+      googleRequestInFlightRef.current = false;
+    };
+  }, [handleGoogleToken, hasGoogleConfig]);
+
+  const handleGoogleClick = () => {
+    if (googleRequestInFlightRef.current || googleLoading) return;
+    if (!hasGoogleConfig) {
+      setServerError("Google sign-in is disabled. Add VITE_GOOGLE_CLIENT_ID to enable it.");
+      return;
+    }
+    if (!isOriginAllowed) {
+      setServerError(`Google sign-in is not enabled for ${window.location.origin}. Add this origin in Google Cloud and VITE_GOOGLE_ALLOWED_ORIGINS.`);
+      return;
+    }
+    if (!googleReady || !tokenClientRef.current) {
+      setServerError("Google sign-in is still loading. Please try again in a moment.");
+      return;
+    }
+
+    googleRequestInFlightRef.current = true;
+    setGoogleLoading(true);
+    setServerError("");
+    setSuccessMessage("");
+
+    try {
+      tokenClientRef.current.requestAccessToken({ prompt: "select_account" });
+    } catch {
+      googleRequestInFlightRef.current = false;
+      setGoogleLoading(false);
+      setServerError("Google sign-in is unavailable for this browser or origin. Check your Google client origins.");
+    }
+  };
 
   const validateHumanCheck = () => {
     if (Number(captchaAnswer) !== captcha.answer) {
@@ -147,7 +233,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
     setValidationError("");
     setLoading(true);
     try {
-      const res = await loginUser({ email: email.trim(), password });
+      const res = await loginWithEmail({ email: email.trim(), password });
       localStorage.setItem("token", res.data.access_token);
       close();
       onAuthSuccess?.(res.data);
@@ -178,7 +264,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
     setValidationError("");
     setLoading(true);
     try {
-      await registerUser({
+      await registerWithEmail({
         name: name.trim(),
         email: email.trim(),
         password,
@@ -211,6 +297,33 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
 
         <h2 className="mb-1 text-center text-2xl font-semibold text-white">{isLogin ? "Welcome back" : "Create your account"}</h2>
         <p className="mb-5 text-center text-xs uppercase tracking-[0.18em] text-slate-400">{helperBadge}</p>
+
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={handleGoogleClick}
+            disabled={!canUseGoogle}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-700 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {googleLoading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" /> : <span className="text-base font-bold text-rose-500">G</span>}
+            {googleLoading ? "Signing in with Google..." : isLogin ? "Continue with Google Login" : "Continue with Google Register"}
+          </button>
+          {!hasGoogleConfig && (
+            <p className="mt-2 text-center text-xs text-slate-400">Google sign-in is disabled. Add VITE_GOOGLE_CLIENT_ID to enable it.</p>
+          )}
+          {hasGoogleConfig && !googleReady && (
+            <p className="mt-2 text-center text-xs text-slate-400">Loading Google sign-in...</p>
+          )}
+          {hasGoogleConfig && googleReady && !isOriginAllowed && (
+            <p className="mt-2 text-center text-xs text-amber-300">Google sign-in is blocked for this origin. Add {typeof window !== "undefined" ? window.location.origin : "this origin"} to your Google OAuth origins and VITE_GOOGLE_ALLOWED_ORIGINS.</p>
+          )}
+        </div>
+
+        <div className="mb-4 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+          <span className="h-px flex-1 bg-slate-800" />
+          <span>or continue with email</span>
+          <span className="h-px flex-1 bg-slate-800" />
+        </div>
 
         {!isLogin && (
           <input

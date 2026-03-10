@@ -48,6 +48,18 @@ class UserLogin(BaseModel):
         return email
 
 
+class GoogleAuthRequest(BaseModel):
+    intent: Literal["login", "register"]
+    credential: Optional[str] = Field(default=None, min_length=20)
+    access_token: Optional[str] = Field(default=None, min_length=20)
+
+    @model_validator(mode="after")
+    def validate_google_auth(self):
+        if not self.credential and not self.access_token:
+            raise ValueError("Google credential is required.")
+        return self
+
+
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=128)

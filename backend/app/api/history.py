@@ -4,11 +4,13 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import get_current_user
 from app.db import SessionLocal
 from app.models.review import Review
 from app.models.session import CodeSession
 from app.models.user import User
+from app.services.rate_limiter import RateLimitExceeded, check_rate_limit
 from app.services.runtime_cache import get_or_set, invalidate_prefix
 
 router = APIRouter(prefix="/history", tags=["history"])
@@ -22,8 +24,17 @@ def get_db():
         db.close()
 
 
+def run_history_rate_limit(user_id: int):
+    try:
+        check_rate_limit(f"history:{user_id}", settings.HISTORY_RATE_LIMIT_PER_MINUTE)
+    except RateLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+
 @router.get("/")
 def get_user_history(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    run_history_rate_limit(current_user.id)
+
     def load_history():
         sessions = (
             db.query(CodeSession)
@@ -68,7 +79,7 @@ def get_user_history(current_user: User = Depends(get_current_user), db: Session
             for session in sessions
         ]
 
-    return get_or_set(f"history:{current_user.id}", 15, load_history)
+    return get_or_set(f"history:{current_user.id}", settings.HISTORY_CACHE_SECONDS, load_history)
 
 
 @router.delete("/{session_id}")

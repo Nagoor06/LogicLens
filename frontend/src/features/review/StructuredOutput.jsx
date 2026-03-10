@@ -92,6 +92,8 @@ function getTitles(actionType) {
 }
 
 function StructuredOutput({ result, expanded, onToggle, showDiff, onToggleDiff, theme = "dark", actionType = "review" }) {
+  const hintItems = useMemo(() => (actionType === "hint" ? splitHints(result?.improvements) : []), [actionType, result?.improvements]);
+
   if (!result) return null;
 
   const shellClass = theme === "light" ? "border-2 border-slate-500 bg-white text-slate-900" : "border-slate-800 bg-slate-950/80 text-slate-100";
@@ -99,7 +101,6 @@ function StructuredOutput({ result, expanded, onToggle, showDiff, onToggleDiff, 
   const buttonClass = theme === "light" ? "border-slate-400 text-slate-700 hover:border-slate-700 hover:text-slate-900" : "border-slate-700 text-slate-300 hover:border-cyan-400 hover:text-white";
   const codeClass = theme === "light" ? "text-slate-800" : "text-slate-200";
   const titles = getTitles(actionType);
-  const hintItems = useMemo(() => (actionType === "hint" ? splitHints(result.improvements) : []), [actionType, result.improvements]);
 
   return (
     <div className="space-y-3">
@@ -135,5 +136,3 @@ function StructuredOutput({ result, expanded, onToggle, showDiff, onToggleDiff, 
 }
 
 export default StructuredOutput;
-
-

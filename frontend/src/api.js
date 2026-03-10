@@ -1,7 +1,8 @@
 import axios from "axios";
 
-const RAW_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://logiclens-production.up.railway.app";
-const API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, "");
+const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").trim();
+const inferredBaseUrl = import.meta.env.DEV ? "http://localhost:8000" : window.location.origin;
+const API_BASE_URL = (configuredBaseUrl || inferredBaseUrl).replace(/\/$/, "");
 
 const API = axios.create({
   baseURL: API_BASE_URL,
@@ -138,6 +139,11 @@ export const loginUser = async (payload) => {
   return response;
 };
 export const registerUser = (payload) => API.post("/auth/register", payload);
+export const googleLoginUser = async (payload) => {
+  const response = await API.post("/auth/google", payload);
+  invalidateApiCache(["me", "history"]);
+  return response;
+};
 export const changePassword = (payload) => API.post("/auth/change-password", payload);
 export const updateProfile = async (payload) => {
   const response = await API.put("/auth/profile", payload);

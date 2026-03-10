@@ -1,6 +1,6 @@
 import json
 import logging
-import threading
+import queue
 import time
 from typing import Generator
 
@@ -19,11 +19,11 @@ from app.services.llm_client import call_llm, stream_llm
 from app.services.prompt_engine import build_prompt
 from app.services.rate_limiter import RateLimitExceeded, check_rate_limit
 from app.services.response_parser import parse_llm_response
-from app.services.runtime_cache import invalidate_prefix
+from app.services.review_queue import submit_review_job
+from app.services.runtime_cache import get_cached, get_or_set, invalidate_prefix, make_review_cache_key, set_cached
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/review", tags=["review"])
-_active_review_slots = threading.BoundedSemaphore(settings.MAX_CONCURRENT_AI_REVIEWS)
 SUPPORTED_LANGUAGES = {"plaintext", "python", "javascript", "typescript", "java", "cpp", "csharp", "go", "rust"}
 
 
@@ -70,25 +70,36 @@ def run_rate_limit(user_id: int):
         raise HTTPException(status_code=429, detail=str(exc)) from exc
 
 
-def acquire_review_slot():
-    if not _active_review_slots.acquire(blocking=False):
-        raise HTTPException(status_code=429, detail="AI is handling too many requests. Please retry in a few seconds.")
+def build_review_cache_key(payload: ReviewRequest, current_user: User) -> str:
+    return make_review_cache_key(
+        current_user.id,
+        {
+            "action_type": payload.action_type,
+            "language": payload.language,
+            "code": payload.code,
+            "question_text": payload.question_text or "",
+        },
+    )
+
+
+def generate_review_result(payload: ReviewRequest) -> dict:
+    prompt = build_prompt(payload.action_type, payload.language, payload.code, payload.question_text)
+    return parse_llm_response(call_llm(prompt))
 
 
 @router.post("/")
 def create_review(payload: ReviewRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     validate_review_payload(payload)
     run_rate_limit(current_user.id)
-    acquire_review_slot()
 
     started_at = time.perf_counter()
-    session = None
+    session = create_session_record(payload, current_user, db)
+    cache_key = build_review_cache_key(payload, current_user)
 
     try:
-        session = create_session_record(payload, current_user, db)
-        prompt = build_prompt(payload.action_type, payload.language, payload.code, payload.question_text)
-        llm_output = call_llm(prompt)
-        parsed_result = parse_llm_response(llm_output)
+        parsed_result = submit_review_job(
+            lambda: get_or_set(cache_key, settings.REVIEW_RESULT_CACHE_SECONDS, lambda: generate_review_result(payload))
+        ).result(timeout=settings.GROQ_TIMEOUT_SECONDS + 5)
         review = save_review(db, session.id, payload.action_type, parsed_result)
         invalidate_prefix(f"history:{current_user.id}")
 
@@ -106,60 +117,80 @@ def create_review(payload: ReviewRequest, current_user: User = Depends(get_curre
         logger.exception(
             "review_failed user_id=%s session_id=%s action_type=%s error=%s",
             current_user.id,
-            getattr(session, "id", None),
+            session.id,
             payload.action_type,
             exc,
         )
         raise HTTPException(status_code=500, detail="Review generation failed.") from exc
-    finally:
-        _active_review_slots.release()
 
 
 @router.post("/stream")
 def stream_review(payload: ReviewRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     validate_review_payload(payload)
     run_rate_limit(current_user.id)
-    acquire_review_slot()
 
     started_at = time.perf_counter()
-    session = None
+    session = create_session_record(payload, current_user, db)
+    cache_key = build_review_cache_key(payload, current_user)
+    cached_result = get_cached(cache_key)
 
-    try:
-        session = create_session_record(payload, current_user, db)
-        prompt = build_prompt(payload.action_type, payload.language, payload.code, payload.question_text)
-    except Exception:
-        _active_review_slots.release()
-        raise
+    if cached_result is not None:
+        review = save_review(db, session.id, payload.action_type, cached_result)
+        invalidate_prefix(f"history:{current_user.id}")
+
+        def cached_stream() -> Generator[str, None, None]:
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Loaded from cache'})}\n\n"
+            yield f"data: {json.dumps({'type': 'final', 'session_id': session.id, 'review_id': review.id, 'result': cached_result})}\n\n"
+
+        return StreamingResponse(cached_stream(), media_type="text/event-stream")
+
+    prompt = build_prompt(payload.action_type, payload.language, payload.code, payload.question_text)
 
     def event_stream() -> Generator[str, None, None]:
-        collected = []
-        try:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing code...'})}\n\n"
-            for token in stream_llm(prompt):
-                collected.append(token)
-                yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+        events: queue.Queue[tuple[str, dict]] = queue.Queue()
 
-            parsed_result = parse_llm_response("".join(collected))
-            review = save_review(db, session.id, payload.action_type, parsed_result)
-            invalidate_prefix(f"history:{current_user.id}")
-            logger.info(
-                "review_stream_completed user_id=%s session_id=%s action_type=%s response_time_ms=%s",
-                current_user.id,
-                session.id,
-                payload.action_type,
-                round((time.perf_counter() - started_at) * 1000, 2),
-            )
-            yield f"data: {json.dumps({'type': 'final', 'session_id': session.id, 'review_id': review.id, 'result': parsed_result})}\n\n"
-        except Exception as exc:
-            logger.exception(
-                "review_stream_failed user_id=%s session_id=%s action_type=%s error=%s",
-                current_user.id,
-                getattr(session, 'id', None),
-                payload.action_type,
-                exc,
-            )
-            yield f"data: {json.dumps({'type': 'error', 'content': 'Streaming failed.'})}\n\n"
-        finally:
-            _active_review_slots.release()
+        def worker():
+            collected = []
+            try:
+                events.put(("status", {"type": "status", "content": "Analyzing code..."}))
+                for token in stream_llm(prompt):
+                    collected.append(token)
+                    events.put(("token", {"type": "token", "content": token}))
+
+                parsed_result = parse_llm_response("".join(collected))
+                events.put(("final_payload", {"result": parsed_result}))
+            except Exception as exc:
+                logger.exception(
+                    "review_stream_failed user_id=%s session_id=%s action_type=%s error=%s",
+                    current_user.id,
+                    session.id,
+                    payload.action_type,
+                    exc,
+                )
+                events.put(("error", {"type": "error", "content": "Streaming failed."}))
+            finally:
+                events.put(("done", {"type": "done"}))
+
+        submit_review_job(worker)
+
+        while True:
+            event_type, payload_data = events.get()
+            if event_type == "done":
+                break
+            if event_type == "final_payload":
+                parsed_result = payload_data["result"]
+                set_cached(cache_key, settings.REVIEW_RESULT_CACHE_SECONDS, parsed_result)
+                review = save_review(db, session.id, payload.action_type, parsed_result)
+                invalidate_prefix(f"history:{current_user.id}")
+                logger.info(
+                    "review_stream_completed user_id=%s session_id=%s action_type=%s response_time_ms=%s",
+                    current_user.id,
+                    session.id,
+                    payload.action_type,
+                    round((time.perf_counter() - started_at) * 1000, 2),
+                )
+                yield f"data: {json.dumps({'type': 'final', 'session_id': session.id, 'review_id': review.id, 'result': parsed_result})}\n\n"
+                continue
+            yield f"data: {json.dumps(payload_data)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
