@@ -6,7 +6,7 @@ import { validateLoginInput, validateRegisterInput } from "./auth.validators";
 const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
 const GOOGLE_ALLOWED_ORIGINS = (import.meta.env.VITE_GOOGLE_ALLOWED_ORIGINS || "")
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 const GOOGLE_SCOPES = "openid email profile";
 
@@ -57,7 +57,8 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
   const helperBadge = useMemo(() => (isLogin ? "Secure sign in" : "Create your workspace access"), [isLogin]);
   const errorMessage = validationError || serverError;
   const hasGoogleConfig = Boolean(GOOGLE_CLIENT_ID);
-  const isOriginAllowed = typeof window !== "undefined" && (GOOGLE_ALLOWED_ORIGINS.length === 0 || GOOGLE_ALLOWED_ORIGINS.includes(window.location.origin));
+  const currentOrigin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  const isOriginAllowed = typeof window !== "undefined" && (GOOGLE_ALLOWED_ORIGINS.length === 0 || GOOGLE_ALLOWED_ORIGINS.includes(currentOrigin));
   const canUseGoogle = hasGoogleConfig && googleReady && isOriginAllowed && !googleLoading;
 
   const validateLogin = useCallback(() => validateLoginInput({ email, password }), [email, password]);
@@ -175,7 +176,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
       return;
     }
     if (!isOriginAllowed) {
-      setServerError(`Google sign-in is not enabled for ${window.location.origin}. Add this origin in Google Cloud and VITE_GOOGLE_ALLOWED_ORIGINS.`);
+      setServerError(`Google sign-in is not enabled for ${currentOrigin}. Add this origin in Google Cloud and VITE_GOOGLE_ALLOWED_ORIGINS.`);
       return;
     }
     if (!googleReady || !tokenClientRef.current) {
@@ -315,7 +316,7 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
             <p className="mt-2 text-center text-xs text-slate-400">Loading Google sign-in...</p>
           )}
           {hasGoogleConfig && googleReady && !isOriginAllowed && (
-            <p className="mt-2 text-center text-xs text-amber-300">Google sign-in is blocked for this origin. Add {typeof window !== "undefined" ? window.location.origin : "this origin"} to your Google OAuth origins and VITE_GOOGLE_ALLOWED_ORIGINS.</p>
+            <p className="mt-2 text-center text-xs text-amber-300">Google sign-in is blocked for this origin. Add {currentOrigin || "this origin"} to your Google OAuth origins and VITE_GOOGLE_ALLOWED_ORIGINS.</p>
           )}
         </div>
 
@@ -395,3 +396,4 @@ function AuthModal({ close, onAuthSuccess, defaultMode = "login" }) {
 }
 
 export default AuthModal;
+

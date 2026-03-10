@@ -43,7 +43,8 @@ class Settings(BaseSettings):
 
     @property
     def frontend_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.FRONTEND_ORIGINS.split(",") if origin.strip()]
+        return [origin.strip().rstrip("/") for origin in self.FRONTEND_ORIGINS.split(",") if origin.strip()]
 
 
 settings = Settings()
+
