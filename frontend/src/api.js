@@ -216,3 +216,19 @@ export async function streamReview(payload, handlers = {}) {
     window.clearTimeout(timeoutId);
   }
 }
+
+
+export const getKnowledgeDocuments = () =>
+  API.get("/knowledge/");
+
+export const uploadKnowledgeDocument = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return API.post("/knowledge/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 120000,
+  });
+};
+
+export const deleteKnowledgeDocument = (documentId) =>
+  API.delete(`/knowledge/${documentId}`);
