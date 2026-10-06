@@ -59,7 +59,8 @@ function KnowledgePanel({ theme, isLoggedIn }) {
     }
   };
 
-  if (!isLoggedIn) return null;
+  const ragEnabled = import.meta.env.VITE_RAG_ENABLED === "true";
+  if (!isLoggedIn || !ragEnabled) return null;
 
   const shellClass =
     theme === "light"
