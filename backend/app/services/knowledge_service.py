@@ -90,9 +90,15 @@ def list_documents(db: Session, user_id: int) -> list[dict]:
             KnowledgeChunk.created_at,
         )
         .where(KnowledgeChunk.user_id == user_id)
-        .distinct(KnowledgeChunk.document_id)
         .order_by(KnowledgeChunk.created_at.desc())
     ).all()
+
+    latest_documents = {}
+    for document_id, title, created_at in rows:
+        latest_documents.setdefault(
+            document_id,
+            {"document_id": document_id, "title": title, "created_at": created_at},
+        )
 
     counts = db.execute(
         select(KnowledgeChunk.document_id, KnowledgeChunk.id)
@@ -105,12 +111,10 @@ def list_documents(db: Session, user_id: int) -> list[dict]:
 
     return [
         {
-            "document_id": document_id,
-            "title": title,
-            "created_at": created_at,
+            **document,
             "chunks": count_map.get(document_id, 0),
         }
-        for document_id, title, created_at in rows
+        for document_id, document in latest_documents.items()
     ]
 
 
