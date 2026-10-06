@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_AI_REVIEWS: int = 16
     MAX_QUEUED_AI_REVIEWS: int = 32
     REVIEW_RESULT_CACHE_SECONDS: int = 300
+
+    # RAG
+    RAG_ENABLED: bool = False
+    OPENAI_API_KEY: str = ""
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSIONS: int = 1536
+    RAG_TOP_K: int = 5
+    RAG_CHUNK_SIZE: int = 900
+    RAG_CHUNK_OVERLAP: int = 120
+    RAG_MAX_QUERY_CHARS: int = 4000
+    RAG_MAX_DOCUMENT_BYTES: int = 5_000_000
+
     HISTORY_CACHE_SECONDS: int = 45
     GOOGLE_CLIENT_ID: str = ""
     FRONTEND_ORIGINS: str = "http://localhost:5173"

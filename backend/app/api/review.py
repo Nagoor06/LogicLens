@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import queue
@@ -70,7 +71,31 @@ def run_rate_limit(user_id: int):
         raise HTTPException(status_code=429, detail=str(exc)) from exc
 
 
-def build_review_cache_key(payload: ReviewRequest, current_user: User) -> str:
+def build_rag_context(payload: ReviewRequest, current_user: User, db: Session) -> tuple[str, list[dict]]:
+    if not settings.RAG_ENABLED:
+        return "", []
+
+    query = "\n".join(
+        part for part in [payload.question_text or "", payload.code] if part.strip()
+    )
+
+    try:
+        from app.services.knowledge_service import retrieve_context
+
+        return retrieve_context(db, current_user.id, query)
+    except Exception:
+        # RAG is additive; a retrieval-provider/database failure should not
+        # take down the underlying code-review workflow.
+        logger.exception("rag_retrieval_failed user_id=%s", current_user.id)
+        return "", []
+
+
+def build_review_cache_key(
+    payload: ReviewRequest,
+    current_user: User,
+    retrieved_context: str,
+) -> str:
+    rag_hash = hashlib.sha256(retrieved_context.encode("utf-8")).hexdigest()[:16] if retrieved_context else "none"
     return make_review_cache_key(
         current_user.id,
         {
@@ -78,36 +103,60 @@ def build_review_cache_key(payload: ReviewRequest, current_user: User) -> str:
             "language": payload.language,
             "code": payload.code,
             "question_text": payload.question_text or "",
+            "rag_context_hash": rag_hash,
         },
     )
 
 
-def generate_review_result(payload: ReviewRequest) -> dict:
-    prompt = build_prompt(payload.action_type, payload.language, payload.code, payload.question_text)
-    return parse_llm_response(call_llm(prompt))
+def generate_review_result(
+    payload: ReviewRequest,
+    retrieved_context: str,
+    sources: list[dict],
+) -> dict:
+    prompt = build_prompt(
+        payload.action_type,
+        payload.language,
+        payload.code,
+        payload.question_text,
+        retrieved_context,
+    )
+    result = parse_llm_response(call_llm(prompt))
+    result["sources"] = sources
+    return result
 
 
 @router.post("/")
-def create_review(payload: ReviewRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_review(
+    payload: ReviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     validate_review_payload(payload)
     run_rate_limit(current_user.id)
 
     started_at = time.perf_counter()
     session = create_session_record(payload, current_user, db)
-    cache_key = build_review_cache_key(payload, current_user)
+    retrieved_context, sources = build_rag_context(payload, current_user, db)
+    cache_key = build_review_cache_key(payload, current_user, retrieved_context)
 
     try:
         parsed_result = submit_review_job(
-            lambda: get_or_set(cache_key, settings.REVIEW_RESULT_CACHE_SECONDS, lambda: generate_review_result(payload))
+            lambda: get_or_set(
+                cache_key,
+                settings.REVIEW_RESULT_CACHE_SECONDS,
+                lambda: generate_review_result(payload, retrieved_context, sources),
+            )
         ).result(timeout=settings.GROQ_TIMEOUT_SECONDS + 5)
+
         review = save_review(db, session.id, payload.action_type, parsed_result)
         invalidate_prefix(f"history:{current_user.id}")
 
         logger.info(
-            "review_completed user_id=%s session_id=%s action_type=%s response_time_ms=%s",
+            "review_completed user_id=%s session_id=%s action_type=%s rag_sources=%s response_time_ms=%s",
             current_user.id,
             session.id,
             payload.action_type,
+            len(parsed_result.get("sources", [])),
             round((time.perf_counter() - started_at) * 1000, 2),
         )
         return {"session_id": session.id, "review_id": review.id, "result": parsed_result}
@@ -125,13 +174,18 @@ def create_review(payload: ReviewRequest, current_user: User = Depends(get_curre
 
 
 @router.post("/stream")
-def stream_review(payload: ReviewRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def stream_review(
+    payload: ReviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     validate_review_payload(payload)
     run_rate_limit(current_user.id)
 
     started_at = time.perf_counter()
     session = create_session_record(payload, current_user, db)
-    cache_key = build_review_cache_key(payload, current_user)
+    retrieved_context, sources = build_rag_context(payload, current_user, db)
+    cache_key = build_review_cache_key(payload, current_user, retrieved_context)
     cached_result = get_cached(cache_key)
 
     if cached_result is not None:
@@ -144,7 +198,13 @@ def stream_review(payload: ReviewRequest, current_user: User = Depends(get_curre
 
         return StreamingResponse(cached_stream(), media_type="text/event-stream")
 
-    prompt = build_prompt(payload.action_type, payload.language, payload.code, payload.question_text)
+    prompt = build_prompt(
+        payload.action_type,
+        payload.language,
+        payload.code,
+        payload.question_text,
+        retrieved_context,
+    )
 
     def event_stream() -> Generator[str, None, None]:
         events: queue.Queue[tuple[str, dict]] = queue.Queue()
@@ -152,12 +212,16 @@ def stream_review(payload: ReviewRequest, current_user: User = Depends(get_curre
         def worker():
             collected = []
             try:
+                if sources:
+                    events.put(("status", {"type": "status", "content": "Retrieved relevant context..."}))
                 events.put(("status", {"type": "status", "content": "Analyzing code..."}))
+
                 for token in stream_llm(prompt):
                     collected.append(token)
                     events.put(("token", {"type": "token", "content": token}))
 
                 parsed_result = parse_llm_response("".join(collected))
+                parsed_result["sources"] = sources
                 events.put(("final_payload", {"result": parsed_result}))
             except Exception as exc:
                 logger.exception(
@@ -183,10 +247,11 @@ def stream_review(payload: ReviewRequest, current_user: User = Depends(get_curre
                 review = save_review(db, session.id, payload.action_type, parsed_result)
                 invalidate_prefix(f"history:{current_user.id}")
                 logger.info(
-                    "review_stream_completed user_id=%s session_id=%s action_type=%s response_time_ms=%s",
+                    "review_stream_completed user_id=%s session_id=%s action_type=%s rag_sources=%s response_time_ms=%s",
                     current_user.id,
                     session.id,
                     payload.action_type,
+                    len(parsed_result.get("sources", [])),
                     round((time.perf_counter() - started_at) * 1000, 2),
                 )
                 yield f"data: {json.dumps({'type': 'final', 'session_id': session.id, 'review_id': review.id, 'result': parsed_result})}\n\n"

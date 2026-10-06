@@ -1,6 +1,6 @@
 # LogicLens
 
-LogicLens is an AI-assisted code review workspace for DSA and competitive programming practice. It combines a FastAPI backend, a React/Vite frontend, structured LLM feedback, auth, saved history, progressive hints, complexity analysis, and fix-code output with diff view.
+LogicLens is an AI-assisted code review workspace for DSA and competitive programming practice. It combines a FastAPI backend, a React/Vite frontend, structured LLM feedback, auth, saved history, progressive hints, complexity analysis, fix-code output with diff view, and an optional retrieval-augmented knowledge base.
 
 ## What It Does
 
@@ -13,6 +13,9 @@ LogicLens is an AI-assisted code review workspace for DSA and competitive progra
 - Streams AI responses from the backend
 - Uses cached reads for faster session and history loading
 - Persists the current editor draft across refresh
+- Supports optional PDF, Markdown, and TXT knowledge-base ingestion
+- Chunks documents, generates embeddings, stores them in PostgreSQL with pgvector, retrieves relevant chunks with cosine similarity, and grounds LLM reviews with retrieved context
+- Shows retrieved source documents in review results
 
 ## Tech Stack
 
@@ -29,9 +32,12 @@ LogicLens is an AI-assisted code review workspace for DSA and competitive progra
 - FastAPI
 - SQLAlchemy
 - PostgreSQL via `psycopg2-binary`
+- pgvector for semantic retrieval
 - JWT auth with `python-jose`
 - Password hashing with `passlib` + `bcrypt`
 - Groq SDK for LLM responses
+- OpenAI embeddings API for retrieval vectors
+- PyPDF for PDF text extraction
 - Redis-backed rate limiting with in-memory fallback
 
 ## Project Structure
@@ -39,24 +45,25 @@ LogicLens is an AI-assisted code review workspace for DSA and competitive progra
 ```text
 LogicLens/
 +- backend/
-¦  +- app/
-¦  ¦  +- api/
-¦  ¦  +- core/
-¦  ¦  +- models/
-¦  ¦  +- services/
-¦  ¦  +- db.py
-¦  ¦  +- main.py
-¦  +- requirements.txt
-¦  +- .env
+Â¦  +- app/
+Â¦  Â¦  +- api/
+Â¦  Â¦  +- core/
+Â¦  Â¦  +- models/
+Â¦  Â¦  +- services/
+Â¦  Â¦  +- db.py
+Â¦  Â¦  +- main.py
+Â¦  +- requirements.txt
+Â¦  +- .env
 +- frontend/
-¦  +- public/
-¦  +- src/
-¦  ¦  +- components/
-¦  ¦  +- pages/
-¦  ¦  +- api.js
-¦  ¦  +- main.jsx
-¦  +- package.json
-¦  +- vite.config.js
+Â¦  +- public/
+Â¦  +- src/
+Â¦  Â¦  +- components/
+Â¦  Â¦  +- features/
+Â¦  Â¦  +- pages/
+Â¦  Â¦  +- api.js
+Â¦  Â¦  +- main.jsx
+Â¦  +- package.json
+Â¦  +- vite.config.js
 +- README.md
 ```
 
@@ -75,12 +82,22 @@ LogicLens/
 - `Complexity`: runtime and optimization analysis
 - `Fix Code`: corrected code + diff view
 
-### Workspace
-- Draft autosave across refresh
-- History drawer with favorites and delete/clear actions
-- Dark/light theme
-- Mobile-aware editor fallback
-- Resizable desktop panels
+### RAG Knowledge Base
+
+RAG is disabled by default so existing deployments continue working without pgvector or embedding credentials.
+
+When enabled:
+
+1. Upload a PDF, Markdown, or TXT document from the workspace.
+2. The backend extracts text and splits it into overlapping chunks.
+3. Chunks are embedded with the configured OpenAI embedding model.
+4. PostgreSQL + pgvector stores the vectors and performs cosine-similarity retrieval.
+5. The most relevant chunks are injected into the review prompt as reference context.
+6. Retrieved documents/chunks are shown in the UI so the user can see what grounded the review.
+
+Set `RAG_ENABLED=true`, provide `OPENAI_API_KEY`, and enable `VITE_RAG_ENABLED=true` on the frontend.
+
+The PostgreSQL instance must have the pgvector extension available. LogicLens creates the extension automatically when RAG is enabled.
 
 ## Environment Variables
 
@@ -97,6 +114,17 @@ GROQ_TIMEOUT_SECONDS=60
 REVIEW_RATE_LIMIT_PER_MINUTE=5
 MAX_CONCURRENT_AI_REVIEWS=16
 REDIS_URL=redis://localhost:6379/0
+
+RAG_ENABLED=true
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+RAG_TOP_K=5
+RAG_CHUNK_SIZE=900
+RAG_CHUNK_OVERLAP=120
+RAG_MAX_QUERY_CHARS=4000
+RAG_MAX_DOCUMENT_BYTES=5000000
+
 FRONTEND_ORIGINS=http://localhost:5173,https://your-frontend-domain.vercel.app
 ```
 
@@ -104,6 +132,7 @@ Create `frontend/.env` if needed:
 
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_RAG_ENABLED=true
 ```
 
 ## How To Run Locally
@@ -171,6 +200,9 @@ If needed, you can also test login manually through `POST /auth/login` using JSO
 - `POST /review/`
 - `POST /review/stream`
 - `GET /analytics/`
+- `GET /knowledge/` (when RAG is enabled)
+- `POST /knowledge/upload` (when RAG is enabled)
+- `DELETE /knowledge/{document_id}` (when RAG is enabled)
 
 ## Running In Production
 
@@ -186,12 +218,14 @@ Notes:
 - Railway/hosting platforms should provide `PORT`
 - Make sure backend env vars are present
 - Make sure dependencies from `backend/requirements.txt` are fully installed
+- When RAG is enabled, use a PostgreSQL deployment with the pgvector extension
 
 ### Frontend
 Set:
 
 ```env
 VITE_API_BASE_URL=https://your-backend-domain
+VITE_RAG_ENABLED=true
 ```
 
 Then build/deploy normally with Vite.
@@ -205,6 +239,7 @@ These issues were already accounted for in the codebase:
 - `httpx` is pinned to a Groq-compatible version
 - `bcrypt` is pinned to a passlib-compatible version
 - `python-multipart` is included for Swagger/OAuth form parsing
+- RAG remains additive and is disabled unless explicitly enabled
 
 ## Performance Notes
 
@@ -219,7 +254,7 @@ LLM-backed APIs are not millisecond operations:
 - `Complexity`
 - `Fix Code`
 
-Those depend on model latency and network latency.
+When RAG is enabled, retrieval adds embedding generation and vector-search latency before the LLM call.
 
 ## Current UX Notes
 
@@ -227,6 +262,7 @@ Those depend on model latency and network latency.
 - Mobile falls back to a simpler editor input for reliability
 - History opens as a left drawer
 - Auth is modal-based
+- Optional Knowledge Base panel supports PDF/Markdown/TXT uploads
 
 ## License
 

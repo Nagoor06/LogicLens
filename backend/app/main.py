@@ -23,8 +23,8 @@ logging.basicConfig(
 
 app = FastAPI(
     title="LogicLens API",
-    description="AI-powered code review platform with structured LLM feedback and user-specific history.",
-    version="1.0.0",
+    description="AI-powered code review platform with structured LLM feedback and optional retrieval-augmented grounding.",
+    version="1.1.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -34,7 +34,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
-Base.metadata.create_all(bind=engine)
 
 
 def ensure_auth_schema():
@@ -49,18 +48,38 @@ def ensure_auth_schema():
             connection.execute(text("UPDATE users SET auth_provider = 'email' WHERE auth_provider IS NULL OR auth_provider = ''"))
 
 
+# Core tables are always created.
+Base.metadata.create_all(bind=engine)
 ensure_auth_schema()
+
 for index in CodeSession.__table__.indexes.union(Review.__table__.indexes):
     index.create(bind=engine, checkfirst=True)
+
+# Vector/RAG storage is opt-in so existing deployments do not require pgvector
+# until RAG is enabled and the Postgres instance supports the extension.
+if settings.RAG_ENABLED:
+    with engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+    from app.models.knowledge import KnowledgeChunk
+
+    Base.metadata.create_all(bind=engine)
+    for index in KnowledgeChunk.__table__.indexes:
+        index.create(bind=engine, checkfirst=True)
 
 app.include_router(auth.router)
 app.include_router(review_api.router)
 app.include_router(history.router)
 
+if settings.RAG_ENABLED:
+    from app.api import knowledge
+
+    app.include_router(knowledge.router)
+
 
 @app.get("/")
 def root():
-    return {"message": "LogicLens backend running"}
+    return {"message": "LogicLens backend running", "rag_enabled": settings.RAG_ENABLED}
 
 
 @app.get("/me")

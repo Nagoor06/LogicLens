@@ -315,6 +315,7 @@ function Dashboard() {
             setCode={setCode}
             question={question}
             setQuestion={setQuestion}
+            isLoggedIn={isLoggedIn}
           />
 
           <div className="hidden lg:flex lg:w-4 lg:flex-none lg:items-stretch lg:justify-center">
