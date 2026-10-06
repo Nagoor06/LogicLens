@@ -55,6 +55,9 @@ def create_document(db: Session, user_id: int, title: str, content: str) -> dict
     if not chunks:
         raise ValueError("Document contains no usable text.")
 
+    if len(chunks) > 500:
+        raise ValueError("Document is too large after chunking. Please upload a smaller document.")
+
     document_id = str(uuid.uuid4())
     embeddings = embed_texts(chunks)
 
@@ -62,7 +65,7 @@ def create_document(db: Session, user_id: int, title: str, content: str) -> dict
         KnowledgeChunk(
             document_id=document_id,
             user_id=user_id,
-            title=title.strip(),
+            title=title.strip()[:200],
             chunk_index=index,
             content=chunk,
             embedding=embedding,
@@ -74,7 +77,7 @@ def create_document(db: Session, user_id: int, title: str, content: str) -> dict
 
     return {
         "document_id": document_id,
-        "title": title.strip(),
+        "title": title.strip()[:200],
         "chunks": len(rows),
     }
 
@@ -124,6 +127,15 @@ def delete_document(db: Session, user_id: int, document_id: str) -> bool:
 
 def retrieve_context(db: Session, user_id: int, query: str) -> tuple[str, list[dict]]:
     if not settings.RAG_ENABLED or not settings.OPENAI_API_KEY or not query.strip():
+        return "", []
+
+    has_knowledge = db.execute(
+        select(KnowledgeChunk.id)
+        .where(KnowledgeChunk.user_id == user_id)
+        .limit(1)
+    ).first()
+
+    if not has_knowledge:
         return "", []
 
     query_embedding = embed_query(query[: settings.RAG_MAX_QUERY_CHARS])
