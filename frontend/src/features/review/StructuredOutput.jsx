@@ -91,6 +91,28 @@ function getTitles(actionType) {
   return { summary: "Summary", bugs: "Bugs", improvements: "Improvements" };
 }
 
+function Sources({ sources, theme }) {
+  if (!Array.isArray(sources) || sources.length === 0) return null;
+
+  const shellClass =
+    theme === "light"
+      ? "border-2 border-slate-500 bg-white text-slate-900"
+      : "border-slate-800 bg-slate-950/80 text-slate-100";
+
+  return (
+    <div className={`rounded-xl p-4 ${shellClass}`}>
+      <p className="text-sm font-semibold">Retrieved Sources</p>
+      <div className="mt-2 space-y-1">
+        {sources.map((source, index) => (
+          <p key={`${source.title}-${source.chunk}-${index}`} className="text-xs opacity-75">
+            {source.title} · Chunk {source.chunk}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StructuredOutput({ result, expanded, onToggle, showDiff, onToggleDiff, theme = "dark", actionType = "review" }) {
   const hintItems = useMemo(() => (actionType === "hint" ? splitHints(result?.improvements) : []), [actionType, result?.improvements]);
 
@@ -111,6 +133,7 @@ function StructuredOutput({ result, expanded, onToggle, showDiff, onToggleDiff, 
       ) : (
         <Section title={titles.improvements} content={result.improvements} open={expanded.improvements} onToggle={() => onToggle("improvements")} theme={theme} />
       )}
+      <Sources sources={result.sources} theme={theme} />
       {result.corrected_code && (
         <div className={`rounded-xl ${shellClass}`}>
           <div className={`flex items-center justify-between border-b px-4 py-3 ${headerClass}`}>
