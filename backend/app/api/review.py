@@ -16,7 +16,6 @@ from app.models.review import Review
 from app.models.schemas import ReviewRequest
 from app.models.session import CodeSession
 from app.models.user import User
-from app.services.knowledge_service import retrieve_context
 from app.services.llm_client import call_llm, stream_llm
 from app.services.prompt_engine import build_prompt
 from app.services.rate_limiter import RateLimitExceeded, check_rate_limit
@@ -81,6 +80,8 @@ def build_rag_context(payload: ReviewRequest, current_user: User, db: Session) -
     )
 
     try:
+        from app.services.knowledge_service import retrieve_context
+
         return retrieve_context(db, current_user.id, query)
     except Exception:
         # RAG is additive; a retrieval-provider/database failure should not
