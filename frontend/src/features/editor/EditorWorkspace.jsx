@@ -1,6 +1,8 @@
 import Editor from "@monaco-editor/react";
 
-function EditorWorkspace({ theme, panelClass, isDesktopLayout, leftPanelWidth, language, setLanguage, detectedLanguage, editorLanguage, isMobileLayout, code, setCode, question, setQuestion }) {
+import KnowledgePanel from "../knowledge/KnowledgePanel";
+
+function EditorWorkspace({ theme, panelClass, isDesktopLayout, leftPanelWidth, language, setLanguage, detectedLanguage, editorLanguage, isMobileLayout, code, setCode, question, setQuestion, isLoggedIn }) {
   return (
     <section style={isDesktopLayout ? { flexBasis: `${leftPanelWidth}%` } : undefined} className={`logiclens-panel rounded-2xl border p-3 sm:p-4 backdrop-blur ${panelClass} min-h-[680px] lg:h-[820px] min-w-0 flex flex-col lg:flex-none`}>
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -48,6 +50,8 @@ function EditorWorkspace({ theme, panelClass, isDesktopLayout, leftPanelWidth, l
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
       />
+
+      <KnowledgePanel theme={theme} isLoggedIn={isLoggedIn} />
 
       <div className="mt-3 h-16 sm:h-14" aria-hidden="true" />
     </section>
