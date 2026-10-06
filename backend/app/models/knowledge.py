@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, String, Text, Index
+from sqlalchemy import Column, DateTime, Index, Integer, String, Text
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import VECTOR
 
@@ -10,6 +10,12 @@ class KnowledgeChunk(Base):
     __tablename__ = "knowledge_chunks"
     __table_args__ = (
         Index("ix_knowledge_chunks_user_document", "user_id", "document_id"),
+        Index(
+            "ix_knowledge_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
